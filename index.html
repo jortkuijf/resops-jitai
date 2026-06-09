@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+<!-- PWA / iOS home-screen -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ResOps">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#080812">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<title>ResOps — Performance Monitor</title>
+<style>
+/* ── Reset & tokens ───────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:     #080812;
+  --s1:     #0e0e1c;
+  --s2:     #14142a;
+  --s3:     #1a1a35;
+  --border: rgba(255,255,255,0.07);
+  --blue:   #5b8dee;
+  --teal:   #38bdf8;
+  --green:  #10b981;
+  --amber:  #f59e0b;
+  --red:    #ef4444;
+  --t1:     #eef2ff;
+  --t2:     #94a3b8;
+  --t3:     #4b5677;
+  --radius: 16px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top,    0px);
+}
+
+html{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--bg);
+  background-image:
+    radial-gradient(ellipse 70% 45% at 15% 5%,  rgba(91,141,238,.09),transparent 60%),
+    radial-gradient(ellipse 60% 40% at 85% 95%, rgba(16,185,129,.07),transparent 60%);
+  background-attachment:fixed;
+  color:var(--t1);
+  min-height:100%;
+  display:flex;
+  flex-direction:column;
+  padding-top:var(--safe-t);
+  -webkit-tap-highlight-color:transparent;
+  -webkit-touch-callout:none;
+  user-select:none;
+}
+
+.label{font-size:10px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:var(--t3)}
+
+/* ── Install banner (iOS only) ─────────────────────────── */
+#installBanner{
+  display:none;
+  background:linear-gradient(135deg,rgba(56,189,248,.12),rgba(91,141,238,.08));
+  border-bottom:1px solid rgba(56,189,248,.2);
+  padding:10px 16px;
+  font-size:12px;color:var(--t2);
+  align-items:center;gap:10px;
+}
+#installBanner.show{display:flex}
+#installBanner b{color:var(--teal)}
+#installBanner .close-btn{
+  margin-left:auto;background:none;border:none;color:var(--t3);
+  font-size:18px;cursor:pointer;padding:0 4px;flex-shrink:0;
+}
+
+/* ── Header ────────────────────────────────────────────── */
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;
+  background:rgba(8,8,18,.85);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:30;
+}
+.logo{font-size:18px;font-weight:800;letter-spacing:3px;
+  background:linear-gradient(135deg,var(--teal),var(--blue));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.logo-sub{font-size:11px;color:var(--t3);letter-spacing:.5px;font-weight:400;margin-top:1px}
+
+.pill{display:flex;align-items:center;gap:7px;padding:6px 12px;
+  border-radius:20px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+  border:1px solid var(--border);background:rgba(255,255,255,.04)}
+.pill-dot{width:7px;height:7px;border-radius:50%;background:var(--t3)}
+.pill.sim .pill-dot{background:var(--amber);animation:blink 1.2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Main ──────────────────────────────────────────────── */
+main{
+  flex:1;display:grid;grid-template-columns:1fr;
+  gap:12px;padding:16px;
+  max-width:880px;margin:0 auto;width:100%;
+  padding-bottom:calc(16px + var(--safe-b));
+}
+@media(min-width:700px){
+  main{grid-template-columns:1fr 1fr;padding:20px}
+  .span2{grid-column:1/-1}
+}
+
+/* ── Cards ─────────────────────────────────────────────── */
+.card{
+  background:rgba(20,20,42,.75);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid var(--border);border-radius:var(--radius);padding:20px;
+}
+.card.pulse-border{animation:borderPulse 1.6s ease-in-out infinite}
+@keyframes borderPulse{0%,100%{border-color:rgba(239,68,68,.3)}50%{border-color:rgba(239,68,68,.7)}}
+
+/* ── Hero ──────────────────────────────────────────────── */
+.hero{display:flex;flex-direction:column;align-items:center;padding:28px 20px 22px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 60% 60% at 50% 50%,rgba(91,141,238,.07),transparent);pointer-events:none}
+
+.ring-wrap{position:relative;width:160px;height:160px;margin-bottom:12px}
+.ring{position:absolute;inset:0;border-radius:50%;border:2px solid var(--teal);opacity:0;
+  animation:ringPulse 1s ease-out infinite}
+.ring:nth-child(2){animation-delay:.45s}
+@keyframes ringPulse{0%{transform:scale(.72);opacity:.55}100%{transform:scale(1.15);opacity:0}}
+
+.hr-num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-size:72px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-3px;line-height:1;
+  color:var(--green);transition:color .6s}
+.hr-num.amber{color:var(--amber)}
+.hr-num.red  {color:var(--red)}
+.hr-unit{font-size:13px;font-weight:500;letter-spacing:1px;color:var(--t2);margin-top:4px}
+
+.baseline-row{font-size:13px;color:var(--t2);display:flex;align-items:center;gap:8px}
+.delta{font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;
+  background:rgba(16,185,129,.15);color:var(--green);transition:background .4s,color .4s}
+.delta.up{background:rgba(245,158,11,.15);color:var(--amber)}
+.delta.hi{background:rgba(239,68,68,.15);color:var(--red)}
+
+.bar-wrap{width:100%;height:4px;background:rgba(255,255,255,.06);border-radius:2px;margin-top:16px;position:relative}
+.bar-fill{height:100%;border-radius:2px;background:var(--green);transition:width .7s,background .5s;max-width:100%}
+.bar-mark{position:absolute;top:-4px;width:2px;height:12px;background:var(--amber);border-radius:1px;transform:translateX(-50%)}
+
+/* ── Stats ─────────────────────────────────────────────── */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-radius:var(--radius);overflow:hidden}
+.stat{background:rgba(20,20,42,.9);padding:16px;display:flex;flex-direction:column;gap:4px}
+.stat-val{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.stat-lbl{font-size:10px;color:var(--t3);font-weight:700;letter-spacing:1.3px;text-transform:uppercase}
+
+/* ── Graph ─────────────────────────────────────────────── */
+#hrCanvas{width:100%;height:100px;display:block}
+
+/* ── Buttons ───────────────────────────────────────────── */
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:14px 16px;border-radius:12px;
+  font-size:14px;font-weight:700;cursor:pointer;border:none;
+  letter-spacing:.3px;min-height:50px;
+  transition:opacity .15s,transform .1s;
+}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-primary{background:linear-gradient(135deg,var(--blue),#3d6de8);color:#fff;box-shadow:0 4px 20px rgba(91,141,238,.3)}
+.btn-ghost  {background:rgba(255,255,255,.06);color:var(--t1);border:1px solid var(--border)}
+.btn-danger {background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+.btn-row    {display:flex;flex-direction:column;gap:10px}
+
+/* ── iOS notice ────────────────────────────────────────── */
+.ios-note{
+  background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.15);
+  border-radius:10px;padding:12px 14px;
+  font-size:12px;color:var(--t2);line-height:1.6;margin-top:10px;
+  display:none;
+}
+.ios-note.show{display:block}
+.ios-note b{color:var(--teal)}
+
+/* ── Settings ──────────────────────────────────────────── */
+.setting{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 0;border-bottom:1px solid var(--border)}
+.setting:last-child{border-bottom:none;padding-bottom:0}
+.setting-info .name{font-size:14px;font-weight:500}
+.setting-info .sub{font-size:11px;color:var(--t2);margin-top:2px}
+.range-row{display:flex;align-items:center;gap:8px}
+.rval{font-size:12px;font-weight:600;min-width:36px;text-align:right;color:var(--t1)}
+input[type=range]{width:90px;accent-color:var(--teal);cursor:pointer;
+  -webkit-appearance:none;height:4px;border-radius:2px;background:var(--s3);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;
+  border-radius:50%;background:var(--teal);cursor:pointer;box-shadow:0 0 8px rgba(56,189,248,.4)}
+input[type=number]{background:var(--s2);border:1px solid var(--border);color:var(--t1);
+  border-radius:8px;padding:8px;width:58px;font-size:13px;text-align:center;
+  -moz-appearance:textfield}
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+
+/* ── Log ────────────────────────────────────────────────── */
+.log-scroll{max-height:80px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.log-row{display:flex;gap:10px;font-size:11.5px;line-height:1.5}
+.log-t{color:var(--t3);flex-shrink:0;font-variant-numeric:tabular-nums}
+.log-m{color:var(--t2)}
+.log-m.ok{color:var(--green)}.log-m.warn{color:var(--amber)}.log-m.info{color:var(--teal)}
+
+/* ── Bottom sheet ──────────────────────────────────────── */
+#backdrop{display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  z-index:40;transition:opacity .3s;opacity:0}
+#backdrop.show{display:block;opacity:1}
+
+#sheet{
+  position:fixed;bottom:0;left:0;right:0;
+  background:linear-gradient(180deg,#0e0e20,#080812);
+  border-top:1px solid rgba(239,68,68,.3);
+  border-radius:24px 24px 0 0;
+  padding:12px 24px calc(28px + var(--safe-b));
+  z-index:50;
+  transform:translateY(100%);
+  transition:transform .38s cubic-bezier(.32,.72,0,1);
+  -webkit-transform:translateY(100%);
+  -webkit-transition:-webkit-transform .38s cubic-bezier(.32,.72,0,1);
+}
+#sheet.show{transform:translateY(0);-webkit-transform:translateY(0)}
+
+@media(min-width:600px){
+  #sheet{left:50%;transform:translateX(-50%) translateY(100%);width:480px;border-radius:24px 24px 0 0}
+  #sheet.show{transform:translateX(-50%) translateY(0)}
+}
+
+.sheet-handle{width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,.15);margin:0 auto 20px}
+.sheet-tag{font-size:10px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;color:var(--red);text-align:center;margin-bottom:4px}
+.sheet-title{font-size:22px;font-weight:800;text-align:center;margin-bottom:2px}
+.sheet-sub{font-size:13px;color:var(--t2);text-align:center;margin-bottom:20px}
+
+.breath-wrap{position:relative;width:140px;height:140px;margin:0 auto 16px}
+.breath-bg{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(56,189,248,.15)}
+.breath-circle{position:absolute;inset:14px;border-radius:50%;
+  background:radial-gradient(circle,rgba(56,189,248,.14),rgba(56,189,248,.02));
+  border:2px solid var(--teal);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transform:scale(.62);
+  transition:transform 1s ease-in-out;-webkit-transition:-webkit-transform 1s ease-in-out;
+  box-shadow:0 0 24px rgba(56,189,248,.12)}
+.b-phase{font-size:9px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--teal)}
+.b-count{font-size:28px;font-weight:800;color:var(--teal);font-variant-numeric:tabular-nums;line-height:1}
+
+.prog-track{height:3px;background:rgba(255,255,255,.07);border-radius:2px;margin-bottom:12px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--teal),var(--blue));border-radius:2px;transition:width 1s linear;width:0%}
+.sheet-clock{text-align:center;font-size:12px;color:var(--t2);margin-bottom:18px}
+.sheet-clock b{color:var(--t1);font-variant-numeric:tabular-nums}
+.sheet-actions{display:flex;gap:10px}
+.sheet-actions .btn{flex:1}
+
+/* ── Footer ─────────────────────────────────────────────── */
+footer{text-align:center;font-size:10.5px;color:var(--t3);
+  padding:10px 20px calc(10px + var(--safe-b));border-top:1px solid var(--border)}
+.priv{display:inline-flex;align-items:center;gap:5px}
+.priv::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green)}
+</style>
+</head>
+<body>
+
+<!-- Install banner (iOS Safari only) -->
+<div id="installBanner">
+  <span>📲 Add to Home Screen: tap <b>Share</b> → <b>Add to Home Screen</b> for the full app experience</span>
+  <button class="close-btn" onclick="this.parentElement.classList.remove('show')">×</button>
+</div>
+
+<!-- Header -->
+<header>
+  <div>
+    <div class="logo">RESOPS</div>
+    <div class="logo-sub">Performance Monitor</div>
+  </div>
+  <div class="pill" id="pill">
+    <div class="pill-dot"></div>
+    <span id="pillTxt">Ready</span>
+  </div>
+</header>
+
+<!-- Main -->
+<main>
+
+  <!-- HR Hero -->
+  <div class="card hero span2" id="heroCard">
+    <div class="ring-wrap">
+      <div class="ring"></div>
+      <div class="ring"></div>
+      <div class="hr-num" id="hrNum">
+        <span id="hrVal">--</span>
+        <span class="hr-unit">BPM</span>
+      </div>
+    </div>
+    <div class="baseline-row">
+      <span id="baselineTxt">Start simulation to begin</span>
+      <span class="delta" id="deltaBadge" style="display:none"></span>
+    </div>
+    <div class="bar-wrap" style="width:90%;max-width:320px">
+      <div class="bar-fill" id="barFill" style="width:0%"></div>
+      <div class="bar-mark" id="barMark" style="left:75%"></div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats card" style="padding:0">
+    <div class="stat"><div class="stat-val" id="sBase">--</div><div class="stat-lbl">Baseline BPM</div></div>
+    <div class="stat"><div class="stat-val" id="sPeak">--</div><div class="stat-lbl">Peak BPM</div></div>
+    <div class="stat"><div class="stat-val" id="sAlerts">0</div><div class="stat-lbl">Alerts fired</div></div>
+    <div class="stat"><div class="stat-val" id="sResets">0</div><div class="stat-lbl">Resets done</div></div>
+  </div>
+
+  <!-- Graph -->
+  <div class="card">
+    <div class="label" style="margin-bottom:10px">Live — Last 2 Minutes</div>
+    <canvas id="hrCanvas"></canvas>
+  </div>
+
+  <!-- Controls -->
+  <div class="card">
+    <div class="label" style="margin-bottom:14px">Device</div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btnSim"  onclick="toggleSim()">▶ Start Simulation</button>
+      <button class="btn btn-ghost"   id="btnConn" onclick="connectBT()">⌚ Connect via Bluetooth</button>
+      <button class="btn btn-danger"  id="btnStop" onclick="disconnect()" style="display:none">■ Stop</button>
+      <button class="btn btn-ghost"   onclick="forceTrigger()" style="font-size:11px;opacity:.45;min-height:40px">⚡ Test Alert</button>
+    </div>
+    <div class="ios-note show" id="iosNote">
+      <b>iPhone note:</b> iOS does not support Web Bluetooth. Use <b>Simulation</b> to experience the full JITAI flow. For live heart rate on iPhone, a native app integration (HealthKit) would be needed in a production build.
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="card span2">
+    <div class="label" style="margin-bottom:14px">Alert Configuration</div>
+    <div class="setting">
+      <div class="setting-info">
+        <div class="name">Alert threshold</div>
+        <div class="sub">BPM above personal baseline</div>
+      </div>
+      <div class="range-row">
+        <input type="range" id="rTh" min="8" max="40" value="15" oninput="setTh(this.value)">
+        <span class="rval" id="vTh">+15</span>
+      </div>
+    </div>
+    <div class="setting">
+      <div class="setting-info">
+        <div class="name">Sustained duration</div>
+        <div class="sub">Seconds above threshold before alert</div>
+      </div>
+      <div class="range-row">
+        <input type="range" id="rDur" min="10" max="60" value="20" oninput="setDur(this.value)">
+        <span class="rval" id="vDur">20 s</span>
+      </div>
+    </div>
+    <div class="setting">
+      <div class="setting-info">
+        <div class="name">Cooldown period</div>
+        <div class="sub">Minutes between alerts</div>
+      </div>
+      <input type="number" value="3" min="1" max="60" onchange="cooldown=+this.value||3">
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="card span2">
+    <div class="label" style="margin-bottom:10px">Event Log
+      <span style="color:var(--t3);font-weight:400;text-transform:none;letter-spacing:0;font-size:10px"> — session only, never stored</span>
+    </div>
+    <div class="log-scroll" id="logList"></div>
+  </div>
+
+</main>
+
+<footer>
+  <span class="priv">All data processed locally. Nothing stored, transmitted, or visible to supervisors.</span>
+</footer>
+
+<!-- Backdrop -->
+<div id="backdrop" onclick="skipReset()"></div>
+
+<!-- Alert bottom sheet -->
+<div id="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-tag">Elevated Arousal Detected</div>
+  <div class="sheet-title">30-Second Reset</div>
+  <div class="sheet-sub" id="sheetSub">Heart rate above baseline</div>
+  <div class="breath-wrap">
+    <div class="breath-bg"></div>
+    <div class="breath-circle" id="breathCircle">
+      <div class="b-phase" id="bPhase">INHALE</div>
+      <div class="b-count" id="bCount">30</div>
+    </div>
+  </div>
+  <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+  <div class="sheet-clock">Reset completes in <b id="sheetClock">30</b> s</div>
+  <div class="sheet-actions">
+    <button class="btn btn-ghost"   onclick="skipReset()">Skip</button>
+    <button class="btn btn-primary" id="btnDone" onclick="completeReset()" disabled>✓ Complete</button>
+  </div>
+</div>
+
+<script>
+// ── iOS detection ────────────────────────────────────────
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const IS_SA  = window.navigator.standalone; // running as installed PWA
+
+// Show install banner if iOS Safari and not already installed
+if (IS_IOS && !IS_SA) document.getElementById('installBanner').classList.add('show');
+
+// Hide iOS note on non-iOS (show BT button cleanly)
+if (!IS_IOS) document.getElementById('iosNote').classList.remove('show');
+
+// Service worker registration
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+// ── State ─────────────────────────────────────────────────
+const HIST = 120;
+let buf=[], baseline=null, peakBPM=0, alertCnt=0, resetCnt=0;
+let elevFrom=null, inAlert=false, lastFire=null;
+let threshold=15, duration=20, cooldown=3;
+let btDevice=null, btChar=null;
+let simTimer=null, simPhI=0, simPhTk=0;
+let resetInt=null, breathInt=null, resetLeft=30;
+
+// ── Settings ──────────────────────────────────────────────
+function setTh(v)  { threshold=+v; document.getElementById('vTh').textContent  = '+'+v; redrawMark(); }
+function setDur(v) { duration =+v; document.getElementById('vDur').textContent = v+' s'; }
+
+// ── Log ───────────────────────────────────────────────────
+function log(msg, cls='') {
+  const d=new Date();
+  const t=[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':');
+  const el=document.getElementById('logList');
+  const row=document.createElement('div'); row.className='log-row';
+  row.innerHTML=`<span class="log-t">${t}</span><span class="log-m ${cls}">${msg}</span>`;
+  el.insertBefore(row,el.firstChild);
+  while(el.children.length>30) el.removeChild(el.lastChild);
+}
+
+// ── Core HR ───────────────────────────────────────────────
+function handleHR(bpm) {
+  buf.push({ts:Date.now(),bpm});
+  if(buf.length>HIST) buf.shift();
+  if(buf.length>=10) {
+    const s=buf.slice(-60).map(r=>r.bpm).sort((a,b)=>a-b);
+    baseline=s[Math.floor(s.length/2)];
+  }
+  if(bpm>peakBPM){peakBPM=bpm;document.getElementById('sPeak').textContent=bpm}
+  updateDisplay(bpm); checkAlert(bpm); drawGraph();
+}
+
+// ── Display ───────────────────────────────────────────────
+function updateDisplay(bpm) {
+  const numEl=document.getElementById('hrNum');
+  document.getElementById('hrVal').textContent=bpm;
+  document.getElementById('sBase').textContent=baseline??'--';
+  const fill=document.getElementById('barFill');
+  const badge=document.getElementById('deltaBadge');
+  const baseTx=document.getElementById('baselineTxt');
+
+  if(!baseline){
+    baseTx.textContent='Calibrating baseline…';
+    badge.style.display='none'; numEl.className='hr-num';
+    fill.style.width='0%'; fill.style.background='var(--green)'; return;
+  }
+  const d=bpm-baseline;
+  baseTx.textContent=`Baseline ${baseline} BPM`;
+  badge.style.display=''; badge.textContent=(d>=0?'+':'')+d;
+  if(d>threshold){
+    numEl.className='hr-num red'; badge.className='delta hi'; fill.style.background='var(--red)';
+  } else if(d>threshold*.55){
+    numEl.className='hr-num amber'; badge.className='delta up'; fill.style.background='var(--amber)';
+  } else {
+    numEl.className='hr-num'; badge.className='delta'; fill.style.background='var(--green)';
+  }
+  fill.style.width=Math.min(100,Math.max(0,(bpm-40)/160*100))+'%';
+  redrawMark();
+}
+
+function redrawMark() {
+  if(!baseline) return;
+  document.getElementById('barMark').style.left=
+    Math.min(97,Math.max(3,(baseline+threshold-40)/160*100))+'%';
+}
+
+// ── Alert logic ───────────────────────────────────────────
+function checkAlert(bpm) {
+  if(!baseline||inAlert) return;
+  if(lastFire&&(Date.now()-lastFire)<cooldown*60000) return;
+  if(bpm-baseline>threshold){
+    if(!elevFrom) elevFrom=Date.now();
+    if((Date.now()-elevFrom)/1000>=duration) fireAlert(bpm);
+  } else { elevFrom=null; }
+}
+
+function fireAlert(bpm) {
+  inAlert=true; lastFire=Date.now(); elevFrom=null;
+  alertCnt++; document.getElementById('sAlerts').textContent=alertCnt;
+  document.getElementById('heroCard').classList.add('pulse-border');
+  log(`⚡ Elevated arousal — ${bpm} BPM (+${bpm-baseline} above baseline)`,'warn');
+
+  // iOS vibration via Vibration API (works on Android; iOS ignores gracefully)
+  if(navigator.vibrate) navigator.vibrate([200,80,200,80,450]);
+
+  // Soft audio chime (requires user gesture — sim button tap qualifies)
+  playChime();
+
+  // iOS notification (if permission granted — forwarded to Apple Watch via OS)
+  if(Notification.permission==='granted') {
+    new Notification('ResOps · Elevated Arousal',{
+      body:`+${bpm-baseline} BPM above baseline. 30-second reset available.`
+    });
+  }
+
+  // BLE Immediate Alert (Android + compatible watches)
+  sendBLEAlert();
+
+  openSheet(bpm);
+}
+
+function forceTrigger() {
+  if(inAlert) return;
+  fireAlert(baseline ? baseline+threshold+5 : 92);
+}
+
+// ── Audio chime ───────────────────────────────────────────
+let audioCtx=null;
+function getAudio(){
+  if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  return audioCtx;
+}
+function playChime(){
+  try{
+    const ctx=getAudio();
+    [[440,0,.16],[554,.22,.16]].forEach(([freq,delay,vol])=>{
+      const osc=ctx.createOscillator(); const g=ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.type='sine'; osc.frequency.value=freq;
+      const t0=ctx.currentTime+delay;
+      g.gain.setValueAtTime(0,t0);
+      g.gain.linearRampToValueAtTime(vol,t0+.07);
+      g.gain.exponentialRampToValueAtTime(.001,t0+.55);
+      osc.start(t0); osc.stop(t0+.6);
+    });
+  }catch(e){}
+}
+
+// ── BLE Immediate Alert ───────────────────────────────────
+async function sendBLEAlert(){
+  if(!btDevice||!btDevice.gatt.connected) return;
+  try{
+    const svc=await btDevice.gatt.getPrimaryService('00001802-0000-1000-8000-00805f9b34fb');
+    const ch =await svc.getCharacteristic('00002a06-0000-1000-8000-00805f9b34fb');
+    await ch.writeValue(new Uint8Array([0x01]));
+  }catch(_){}
+}
+
+// ── Bottom sheet ──────────────────────────────────────────
+function openSheet(bpm){
+  resetLeft=30;
+  document.getElementById('sheetSub').textContent=
+    baseline?`${bpm} BPM — +${bpm-baseline} above your baseline`:`${bpm} BPM detected`;
+  document.getElementById('sheetClock').textContent=30;
+  document.getElementById('progFill').style.width='0%';
+  document.getElementById('bCount').textContent=30;
+  document.getElementById('btnDone').disabled=true;
+  document.getElementById('backdrop').classList.add('show');
+  document.getElementById('sheet').classList.add('show');
+  startBreathing(); startResetCountdown();
+}
+
+const PHASES=[
+  {label:'INHALE',scale:1.0},{label:'HOLD',scale:1.0},
+  {label:'EXHALE',scale:0.62},{label:'HOLD',scale:0.62}
+];
+function startBreathing(){
+  clearInterval(breathInt);
+  let pi=0,pt=0; applyPhase(PHASES[0]);
+  breathInt=setInterval(()=>{
+    pt++;
+    if(pt>=4){pi=(pi+1)%PHASES.length;pt=0;applyPhase(PHASES[pi]);}
+    if(resetLeft<=0) clearInterval(breathInt);
+  },1000);
+}
+function applyPhase(p){
+  document.getElementById('bPhase').textContent=p.label;
+  document.getElementById('breathCircle').style.transform=`scale(${p.scale})`;
+  document.getElementById('breathCircle').style.webkitTransform=`scale(${p.scale})`;
+}
+function startResetCountdown(){
+  clearInterval(resetInt);
+  resetInt=setInterval(()=>{
+    resetLeft--;
+    document.getElementById('sheetClock').textContent=Math.max(0,resetLeft);
+    document.getElementById('bCount').textContent=Math.max(0,resetLeft);
+    document.getElementById('progFill').style.width=((30-resetLeft)/30*100).toFixed(1)+'%';
+    if(resetLeft<=0){clearInterval(resetInt);document.getElementById('btnDone').disabled=false;}
+  },1000);
+}
+function skipReset(){ closeSheet(); log('Reset skipped'); }
+function completeReset(){
+  closeSheet(); resetCnt++;
+  document.getElementById('sResets').textContent=resetCnt;
+  log('✓ 30-second reset completed','ok');
+  if(navigator.vibrate) navigator.vibrate(80);
+}
+function closeSheet(){
+  clearInterval(resetInt); clearInterval(breathInt);
+  document.getElementById('backdrop').classList.remove('show');
+  document.getElementById('sheet').classList.remove('show');
+  document.getElementById('heroCard').classList.remove('pulse-border');
+  inAlert=false; elevFrom=null;
+}
+
+// ── Graph ─────────────────────────────────────────────────
+function drawGraph(){
+  const canvas=document.getElementById('hrCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const rect=canvas.getBoundingClientRect();
+  if(!rect.width) return;
+  canvas.width=rect.width*dpr; canvas.height=rect.height*dpr;
+  const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
+  const W=rect.width,H=rect.height;
+  ctx.clearRect(0,0,W,H);
+  if(buf.length<2) return;
+  const bpms=buf.map(r=>r.bpm);
+  const lo=Math.max(40,Math.min(...bpms)-8), hi=Math.min(200,Math.max(...bpms)+8), span=hi-lo||1;
+  const padded=Array(HIST).fill(null);
+  buf.forEach((r,i)=>{padded[HIST-buf.length+i]=r.bpm});
+  const xOf=i=>(i/(HIST-1))*W;
+  const yOf=v=>H-6-((v-lo)/span)*(H-12);
+  if(baseline){
+    [[baseline,'rgba(56,189,248,.2)',[2,6]],[baseline+threshold,'rgba(245,158,11,.35)',[4,5]]]
+    .forEach(([val,stroke,dash])=>{
+      ctx.beginPath();ctx.setLineDash(dash);ctx.strokeStyle=stroke;ctx.lineWidth=1;
+      ctx.moveTo(0,yOf(val));ctx.lineTo(W,yOf(val));ctx.stroke();
+    });
+    ctx.setLineDash([]);
+  }
+  ctx.beginPath();
+  let started=false,firstX=0,lastX=0;
+  padded.forEach((v,i)=>{
+    if(v===null) return;
+    const x=xOf(i),y=yOf(v);
+    if(!started){ctx.moveTo(x,y);firstX=x;started=true}else ctx.lineTo(x,y);
+    lastX=x;
+  });
+  ctx.strokeStyle='rgba(56,189,248,.9)';ctx.lineWidth=2;ctx.lineJoin='round';ctx.stroke();
+  if(started){
+    ctx.lineTo(lastX,H);ctx.lineTo(firstX,H);ctx.closePath();
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'rgba(56,189,248,.18)');g.addColorStop(1,'rgba(56,189,248,0)');
+    ctx.fillStyle=g;ctx.fill();
+  }
+}
+window.addEventListener('resize',drawGraph);
+
+// ── Simulation ────────────────────────────────────────────
+const SIM=[
+  {name:'Resting',         ticks:65,hr:t=>68+Math.sin(t*.08)*2.5},
+  {name:'Incident begins', ticks:28,hr:t=>68+(t/28)*26},
+  {name:'Sustained high',  ticks:45,hr:t=>94+Math.sin(t*.28)*3.5},
+  {name:'Recovering',      ticks:32,hr:t=>94-(t/32)*20},
+  {name:'Back to resting', ticks:55,hr:t=>74-(t/55)*5},
+];
+function toggleSim(){ simTimer ? stopSim() : startSim(); }
+function startSim(){
+  simPhI=0; simPhTk=0;
+  document.getElementById('pill').className='pill sim';
+  document.getElementById('pillTxt').textContent='Simulation';
+  document.getElementById('btnSim').textContent='■ Stop Simulation';
+  document.getElementById('btnConn').style.display='none';
+  document.getElementById('btnStop').style.display='block';
+  log('Simulation started — incident scenario loading','info');
+  // Request notification permission on first user gesture
+  if(Notification.permission==='default') Notification.requestPermission();
+  // Unlock audio context (iOS requires this on a user gesture)
+  getAudio();
+  simTimer=setInterval(simTick,1000);
+}
+function simTick(){
+  const phase=SIM[simPhI]; simPhTk++;
+  const bpm=Math.round(Math.max(45,Math.min(190,phase.hr(simPhTk)+(Math.random()-.5)*2.5)));
+  handleHR(bpm);
+  if(simPhTk>=phase.ticks){simPhI=(simPhI+1)%SIM.length;simPhTk=0;log('Scenario: '+SIM[simPhI].name,'info')}
+}
+function stopSim(){
+  clearInterval(simTimer); simTimer=null;
+  document.getElementById('btnSim').textContent='▶ Start Simulation';
+  document.getElementById('btnConn').style.display='block';
+  document.getElementById('btnStop').style.display='none';
+  document.getElementById('pill').className='pill';
+  document.getElementById('pillTxt').textContent='Ready';
+  log('Simulation stopped');
+}
+
+// ── Bluetooth (Android / Chrome desktop) ─────────────────
+async function connectBT(){
+  if(!navigator.bluetooth){
+    alert('Web Bluetooth is not available on iOS Safari.\n\nUse the simulation mode to experience the full flow.');
+    return;
+  }
+  if(Notification.permission==='default') Notification.requestPermission();
+  try{
+    log('Scanning for heart rate devices…');
+    btDevice=await navigator.bluetooth.requestDevice({
+      filters:[{services:['heart_rate']}],
+      optionalServices:['00001802-0000-1000-8000-00805f9b34fb']
+    });
+    log(`Connecting to "${btDevice.name||'device'}"…`);
+    const server=await btDevice.gatt.connect();
+    const svc=await server.getPrimaryService('heart_rate');
+    btChar=await svc.getCharacteristic('heart_rate_measurement');
+    btChar.addEventListener('characteristicvaluechanged',onBTHR);
+    await btChar.startNotifications();
+    document.getElementById('pill').className='pill sim';
+    document.getElementById('pillTxt').textContent=btDevice.name||'Watch';
+    document.getElementById('btnSim').style.display='none';
+    document.getElementById('btnConn').style.display='none';
+    document.getElementById('btnStop').style.display='block';
+    log(`Connected to "${btDevice.name||'device'}"`, 'ok');
+    btDevice.addEventListener('gattserverdisconnected',()=>{
+      log('Watch disconnected','warn');
+      document.getElementById('btnSim').style.display='block';
+      document.getElementById('btnConn').style.display='block';
+      document.getElementById('btnStop').style.display='none';
+      document.getElementById('pill').className='pill';
+      document.getElementById('pillTxt').textContent='Ready';
+    });
+  }catch(e){ if(e.name!=='NotFoundError') log('Connection failed: '+e.message,'warn'); }
+}
+function onBTHR(ev){
+  const data=ev.target.value, flags=data.getUint8(0);
+  handleHR((flags&0x01)?data.getUint16(1,true):data.getUint8(1));
+}
+
+function disconnect(){
+  if(btDevice&&btDevice.gatt.connected) btDevice.gatt.disconnect();
+  stopSim();
+}
+
+// ── Init ──────────────────────────────────────────────────
+log('ResOps ready — tap Start Simulation to begin','info');
+log('All data is processed locally and never stored','ok');
+drawGraph();
+</script>
+</body>
+</html>
